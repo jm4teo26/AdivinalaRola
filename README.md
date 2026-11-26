@@ -16,6 +16,16 @@ Las peticiones se hacen con **JSONP** (parámetro `callback`), así funciona en 
 ## Reto del día
 La fecha se usa como **semilla de un generador de números aleatorios**, así que todos los que jueguen el mismo día y el mismo género escuchan **las mismas 10 canciones** y pueden comparar puntajes, todo sin backend.
 
+## Top de jugadores
+Al terminar una partida, el jugador escribe su nombre y su puntuación se sube sola. Al final de la página hay dos tops: **General** (todos los géneros) y **Por género** (con selector). Al subir, se le dice en qué lugar quedó en cada uno.
+
+Como GitHub Pages no tiene servidor, el top compartido usa **Firebase Realtime Database** (gratis) por su API REST, sin SDK. Para activarlo:
+1. Crea un proyecto en [console.firebase.google.com](https://console.firebase.google.com) → *Realtime Database* → *Crear base de datos*.
+2. En la pestaña *Reglas*, pega el contenido de [`firebase-rules.json`](firebase-rules.json) y publica.
+3. Copia la URL de la base (p. ej. `https://tu-proyecto-default-rtdb.firebaseio.com`) en la constante `DB_URL` de `index.html`.
+
+Si `DB_URL` está vacía, el top funciona igual pero se guarda sólo en el dispositivo (`localStorage`).
+
 ## Tecnología
 HTML, CSS y JavaScript puro. Audio con el elemento `<audio>`. El récord de cada género se guarda en `localStorage`. El código QR se genera con [qrcode.js](https://github.com/davidshimjs/qrcodejs) a partir de la URL donde esté publicada la página.
 Desplegado en GitHub Pages.

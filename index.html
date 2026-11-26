@@ -68,9 +68,24 @@ button:disabled{cursor:default;opacity:.5}
 .url{word-break:break-all;font-size:14px;color:var(--mut)}
 .hide{display:none!important}
 .err{background:var(--bad);color:#fff;padding:14px;border-radius:14px;margin-top:14px}
+/* top de jugadores */
+h3{margin:0 0 8px;font-size:18px;font-weight:800}
+.lb{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:12px}
+.lbhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.lbhead h3{margin:0}
+.rank{list-style:none;margin:0;padding:0}
+.rank li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 4px;border-bottom:2px dashed var(--mut)}
+.rank .pos{font:16px Bungee,sans-serif;color:var(--mut)}
+.rank li:nth-child(1) .pos{color:#d4a017}.rank li:nth-child(2) .pos{color:#8a8f98}.rank li:nth-child(3) .pos{color:#b06a35}
+.rank .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}.rank .nm small{display:block;font-weight:400;color:var(--mut);font-size:13px}
+.rank li.me{background:var(--teal);color:#fff;border-radius:10px}.rank li.me .pos,.rank li.me small{color:#fff}
+.rank li.empty{display:block;color:var(--mut);border:0}
+input,select{font:inherit;color:inherit;background:var(--card);border:3px solid var(--line);border-radius:14px;min-height:48px;padding:8px 12px}
+select{min-height:40px;padding:4px 8px;font-weight:700}
+input:focus-visible,select:focus-visible{outline:4px solid var(--teal);outline-offset:2px}
+#nick{flex:1 1 200px}
 footer{margin-top:28px;font-size:13px;color:var(--mut)}footer a{color:inherit}
 @media(prefers-reduced-motion:reduce){.vinyl svg,.eq i{animation:none!important}}
-@media(max-width:600px){.genres{grid-template-columns:repeat(2,minmax(0,1fr))}.deck,.opts,.modes{grid-template-columns:minmax(0,1fr)}.vinyl{max-width:220px}.qr{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}}
+@media(max-width:600px){.genres{grid-template-columns:repeat(2,minmax(0,1fr))}.deck,.opts,.modes{grid-template-columns:minmax(0,1fr)}.vinyl{max-width:220px}.qr{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}.lb{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
@@ -135,6 +150,9 @@ footer{margin-top:28px;font-size:13px;color:var(--mut)}footer a{color:inherit}
       <p id="endTxt" style="margin:0"></p>
       <div class="row"><button class="cta" id="bAgain">Jugar otra vez</button><button id="bShare">Compartir resultado</button></div>
       <p class="sub" id="shareMsg"></p>
+      <h3 style="margin-top:16px">Sube tu puntuación al top</h3>
+      <form class="row" id="sendForm" style="margin-top:0"><input id="nick" maxlength="20" placeholder="Tu nombre" autocomplete="nickname" aria-label="Tu nombre"><button class="alt" type="submit" id="bSend">Subir al top</button></form>
+      <p class="sub" id="sendMsg"></p>
     </div>
     <div class="box pad"><h2>Lo que sonó</h2><table class="board" id="played"></table></div>
   </section>
@@ -145,6 +163,15 @@ footer{margin-top:28px;font-size:13px;color:var(--mut)}footer a{color:inherit}
     <div id="qr"></div>
     <div><h2>Escanea y juega</h2><p style="margin:0 0 6px">Apunta la cámara de tu celular al código. Súbele al volumen.</p><p class="url" id="url"></p></div>
   </div>
+
+  <section class="box pad" id="top">
+    <h2>Top de jugadores</h2>
+    <p class="sub" id="topNote" style="margin:0"></p>
+    <div class="lb">
+      <div><div class="lbhead"><h3>General</h3></div><ol class="rank" id="rankAll"></ol></div>
+      <div><div class="lbhead"><h3><label for="rankG">Por género</label></h3><select id="rankG"></select></div><ol class="rank" id="rankGen"></ol></div>
+    </div>
+  </section>
 
   <footer>Canciones y fragmentos de 30 s proporcionados por la <a href="https://performance-partners.apple.com/search-api">iTunes Search API</a> de Apple. Escúchalas completas en Apple Music.</footer>
 </div>
@@ -161,6 +188,11 @@ const GENRES=[
  {id:"clasicos",name:"Clásicos 80s y 90s",hint:"Queen, Michael Jackson…",artists:["Michael Jackson","Queen","Madonna","Bon Jovi","Nirvana","Whitney Houston","Guns N' Roses","a-ha"]},
  {id:"mezcla",name:"Mezcla de todo",hint:"Un poco de cada género",artists:null}
 ];
+/* ---------- TOP DE JUGADORES ----------
+   Pega aquí la URL de tu Firebase Realtime Database (ver README).
+   Si se deja vacía, el top se guarda sólo en este dispositivo. */
+const DB_URL="";
+const TOP_N=10,TOP_FETCH=100;
 const LEVELS=[1,3,7,15],PTS=[300,200,120,60],ROUNDS=10,PER_ARTIST=10,COVER_COST=50;
 const $=id=>document.getElementById(id),audio=$("audio");
 let genre=GENRES[0],G=null,stopTimer=null,playToken=0;
@@ -205,6 +237,59 @@ async function buildPool(g,r){
   const lists=await Promise.allSettled(artists.map(songsOf));
   const all=lists.flatMap(x=>x.status==="fulfilled"?x.value:[]);
   const seen=new Set();return all.filter(s=>{const k=norm(s.title);if(seen.has(k))return false;seen.add(k);return true}).sort((a,b)=>a.id-b.id);
+}
+
+/* ---------- top de jugadores ---------- */
+const gName=id=>(GENRES.find(g=>g.id===id)||{name:id}).name;
+const byScore=(a,b)=>b.score-a.score||a.t-b.t;
+const db={
+  on:!!DB_URL,
+  async top(path){
+    if(!this.on)return(store.get("lb_"+path)||[]).sort(byScore);
+    const r=await fetch(`${DB_URL.replace(/\/$/,"")}/scores/${path}.json?orderBy=%22score%22&limitToLast=${TOP_FETCH}`);
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    return Object.values(await r.json()||{}).sort(byScore);
+  },
+  async add(e){
+    if(!this.on){for(const p of["all",e.genre]){const l=(store.get("lb_"+p)||[]);l.push(e);store.set("lb_"+p,l.sort(byScore).slice(0,TOP_FETCH))}return}
+    const r=await fetch(`${DB_URL.replace(/\/$/,"")}/scores.json`,{method:"PATCH",body:JSON.stringify({["all/"+e.id]:e,[e.genre+"/"+e.id]:e})});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+  }
+};
+let myId=null;
+function renderRank(el,list,showGenre){
+  el.innerHTML=list.length?list.slice(0,TOP_N).map((x,i)=>`<li class="${x.id===myId?"me":""}"><span class="pos">${i+1}</span><span class="nm">${esc(x.name)}<small>${showGenre?esc(gName(x.genre))+" · ":""}${x.hits}/${ROUNDS}${x.daily?" · reto del día":""}</small></span><b>${x.score}</b></li>`).join("")
+    :`<li class="empty">Aún no hay puntuaciones. ¡Sé el primero!</li>`;
+}
+async function loadTop(which){
+  const jobs=[];
+  if(which!=="genre")jobs.push(db.top("all").then(l=>renderRank($("rankAll"),l,true)));
+  if(which!=="all")jobs.push(db.top($("rankG").value).then(l=>renderRank($("rankGen"),l,false)));
+  try{await Promise.all(jobs)}catch(e){$("topNote").textContent="No se pudo cargar el top. Revisa tu conexión."}
+}
+async function sendScore(ev){
+  ev.preventDefault();
+  if(!G||G.sent)return;
+  const name=$("nick").value.replace(/\s+/g," ").trim();
+  if(name.length<2){$("sendMsg").textContent="Escribe un nombre de al menos 2 letras.";$("nick").focus();return}
+  store.set("nick",name);
+  const e={id:Date.now().toString(36)+Math.random().toString(36).slice(2,8),name,score:G.score,hits:G.hits,genre:genre.id,daily:G.daily,t:Date.now()};
+  $("bSend").disabled=true;$("sendMsg").textContent="Subiendo…";
+  try{
+    await db.add(e);G.sent=true;myId=e.id;
+    const [all,gen]=await Promise.all([db.top("all"),db.top(genre.id)]);
+    const pa=all.findIndex(x=>x.id===e.id)+1,pg=gen.findIndex(x=>x.id===e.id)+1;
+    const p=n=>n?`lugar #${n}`:`fuera del top ${TOP_FETCH}`;
+    $("sendMsg").textContent=`¡Listo, ${name}! Quedaste en el ${p(pa)} general y en el ${p(pg)} de ${genre.name}.`;
+    $("rankG").value=genre.id;renderRank($("rankAll"),all,true);renderRank($("rankGen"),gen,false);
+  }catch(err){$("bSend").disabled=false;$("sendMsg").textContent="No se pudo subir tu puntuación. Intenta de nuevo."}
+}
+function initTop(){
+  $("rankG").innerHTML=GENRES.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
+  $("rankG").value=genre.id;
+  $("topNote").textContent=db.on?"Las mejores puntuaciones de todos los jugadores.":"Top guardado sólo en este dispositivo (falta configurar la base de datos compartida).";
+  $("nick").value=store.get("nick")||"";
+  loadTop();
 }
 
 /* ---------- juego ---------- */
@@ -276,6 +361,7 @@ function finish(){
   $("played").innerHTML=G.log.map(x=>`<tr><td><img alt="" src="${esc(x.s.art.replace("600x600","100x100"))}"></td><td><b>${esc(x.s.title)}</b><br><span class="sub">${esc(x.s.artist)}</span></td><td>${x.ok?"+"+x.gained:"✗"}</td></tr>`).join("");
   const k="best_"+genre.id,b=store.get(k)||0;if(G.score>b)store.set(k,G.score);
   $("shareMsg").textContent="";bestTxt();
+  G.sent=false;$("bSend").disabled=false;$("sendMsg").textContent=`Tu puntuación (${G.score} pts) se sube sola: sólo pon tu nombre.`;
 }
 async function share(){
   const txt=`Saqué ${G.score} pts (${G.hits}/${ROUNDS}) en Adivina la Rola, ${genre.name}${G.daily?", Reto del "+fmtDay():""}. ¿Me ganas? ${location.href.split("#")[0]}`;
@@ -294,7 +380,9 @@ function makeQR(){
 }
 
 /* ---------- eventos ---------- */
-$("genres").addEventListener("click",e=>{const b=e.target.closest("button");if(b){genre=GENRES[+b.dataset.g];genres()}});
+$("genres").addEventListener("click",e=>{const b=e.target.closest("button");if(b){genre=GENRES[+b.dataset.g];genres();if($("rankG").value!==genre.id){$("rankG").value=genre.id;loadTop("genre")}}});
+$("rankG").onchange=()=>loadTop("genre");
+$("sendForm").addEventListener("submit",sendScore);
 $("bDaily").onclick=()=>start(true);$("bFree").onclick=()=>start(false);
 $("bPlay").onclick=()=>play(G.done?0:LEVELS[G.lvl]);
 $("bMore").onclick=more;$("bCover").onclick=cover;
@@ -308,7 +396,7 @@ document.addEventListener("keydown",e=>{
   if(!G.done&&"1234".includes(e.key))answer(+e.key-1);
   else if(e.key===" "&&document.activeElement.tagName!=="BUTTON"){e.preventDefault();$("bPlay").click()}
 });
-genres();makeQR();
+genres();makeQR();initTop();
 }
 </script>
 </body>

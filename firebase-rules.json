@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "scores": {
+      ".read": true,
+      "$g": {
+        ".indexOn": ["score"],
+        "$id": {
+          ".write": "!data.exists()",
+          ".validate": "$g.matches(/^(all|reggaeton|regional|rock|pop|clasicos|mezcla)$/) && newData.hasChildren(['id','name','score','hits','genre','daily','t']) && newData.child('id').val() === $id && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 20 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 4200 && newData.child('hits').isNumber() && newData.child('hits').val() >= 0 && newData.child('hits').val() <= 10 && newData.child('daily').isBoolean() && newData.child('t').isNumber() && ($g === 'all' || $g === newData.child('genre').val())",
+          "$other": { ".validate": "$other.matches(/^(id|name|score|hits|genre|daily|t)$/)" }
+        }
+      }
+    }
+  }
+}
